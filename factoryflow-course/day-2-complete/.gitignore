@@ -1,0 +1,26 @@
+# Environments — never commit these. The lock file is what makes the project
+# reproducible, not the folder full of installed packages.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Derived data. The raw export is the source of truth and is committed;
+# anything we compute from it can be recomputed, so it does not belong in git.
+data/processed/
+
+# Notebook outputs are noise in a diff.
+.ipynb_checkpoints/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
