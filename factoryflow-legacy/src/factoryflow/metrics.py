@@ -98,9 +98,16 @@ def availability(readings: pd.DataFrame) -> float:
     # does line by line -- why it does it that way.
     #
     # Your answer:
+    # SETUP is a planned activity, not a production activity. It's the time it takes to prepare the machine for production, not the time it spends producing.
     #
     # TODO(L2): write the body here. The brief is above.
-    raise NotImplementedError("S1.4")
+    
+    planned_minutes = _minutes_in_state(readings, config.PLANNED_STATES)
+    if planned_minutes == 0:
+        return math.nan
+
+    run_minutes = _minutes_in_state(readings, {config.PRODUCING_STATE})
+    return run_minutes / planned_minutes
 
 
 def performance(readings: pd.DataFrame, ideal_cycle_time_s: float | None = None) -> float:
@@ -155,6 +162,8 @@ def performance(readings: pd.DataFrame, ideal_cycle_time_s: float | None = None)
     total_units = int(readings["units_produced"].sum())
     # TODO(L1): minutes -> seconds, then (ideal_cycle_time_s * total_units) / run_seconds
 
+    run_seconds = run_minutes * config.SAMPLE_INTERVAL_S
+    return (ideal_cycle_time_s * total_units) / run_seconds
 
 def quality(readings: pd.DataFrame) -> float:
     """Share of produced units that were not rejected.
@@ -243,6 +252,7 @@ def oee(readings: pd.DataFrame, ideal_cycle_time_s: float | None = None) -> floa
     #   then copy src/factoryflow/metrics.py over yours, and commit it.
     # TODO(L1): the three factors multiplied; pass ideal_cycle_time_s to performance()
 
+    availability(readings=readings) * performance(readings=readings, ideal_cycle_time_s=ideal_cycle_time_s) * quality(readings=readings)
 
 # ══ BONUS ══════════════════════════════════════════════════════════════════
 #
