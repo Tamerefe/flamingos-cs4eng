@@ -12,7 +12,7 @@
 import pandas as pd
 import datetime
 
-path = "C:\\Users\\ASUS\\Documents\\GitHub\\flamingos-cs4eng\\factoryflow-legacy\\production_data.csv"
+path = r"C:\\Users\\msi\\source\\repos\\cs4eng\\flamingos-cs4eng\\factoryflow-legacy\\production_data.csv"
 
 df = pd.read_csv(path)
 
