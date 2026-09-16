@@ -141,13 +141,17 @@ def health() -> Health:
     which looks identical to a healthy service until someone asks for a number.
     """
     # TODO(L1): CORE 1 -- return Health(status=..., rows_loaded=len(_readings))
-
+    return Health(status="ok", rows_loaded=len(_readings))
 
 @app.get("/machines", response_model=list[Machine], summary="Machines on the line")
 def machines() -> list[Machine]:
     """List the machines present in the loaded data."""
     # TODO(L1): CORE 2 -- drop_duplicates on machine_id/line_id, one Machine per row
-
+    pairs = _readings[["machine_id", "line_id"]].drop_duplicates().sort_values("machine_id")
+    return [
+        Machine(machine_id=row.machine_id, line=row.line_id)
+        for row in pairs.itertuples(index=False)
+    ]
 
 @app.get("/metrics", response_model=list[KpiRow], summary="OEE per machine per bucket")
 def metrics(
@@ -199,6 +203,10 @@ def metrics(
     selected = _filter_machine(_readings, machine)
 
     # TODO(L1): narrow to timestamp >= from_ and <= to, where each one was given
+    if from_ is not None:
+        selected = selected[selected["timestamp"] >= _as_utc(from_)]
+    if to is not None:
+        selected = selected[selected["timestamp"] <= _as_utc(to)]
 
     # An empty selection is a fine answer, not an error. Nobody asked a wrong
     # question; there is simply nothing in that window.
@@ -206,7 +214,8 @@ def metrics(
         return []
 
     # TODO(L1): one KpiRow per record in _records(pipeline.kpi_table(selected, freq))
-
+    return [KpiRow(**record)
+        for record in _records(pipeline.kpi_table(selected, freq))]
 
 @app.get("/anomalies", response_model=list[Anomaly], summary="Episodes worth looking at")
 def anomaly_list(
@@ -258,9 +267,12 @@ def anomaly_list(
         return []
 
     # TODO(L1): drop episodes before `since`, then those below min_severity
+    if since is not None:
+        found = found[found["severity"] >= min_severity]
 
     # TODO(L1): sort most severe first, earliest first; return one Anomaly per record
-
+    found = found.sort_values(["severity", "timestamp"], ascending=[False, True])
+    return [Anomaly(**record) for record in _records(found)]
 
 # ══ BONUS ══════════════════════════════════════════════════════════════════
 #
