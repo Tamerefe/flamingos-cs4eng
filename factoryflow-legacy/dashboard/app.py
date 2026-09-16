@@ -136,7 +136,9 @@ def fetch(path: str, **params) -> list[dict]:
     #   in the course folder:  git checkout end/s2-5
     #   then copy dashboard/app.py over yours, and commit it.
     # TODO(L1): GET {API_BASE}{path} with params, return .json()
-
+    response = httpx.get(f"{API_BASE}{path}", params=params, timeout=REQUEST_TIMEOUT_S)
+    response.raise_for_status() 
+    return response.json()
 
 def api_is_up() -> tuple[bool, str]:
     try:
@@ -301,6 +303,8 @@ start, end = window if isinstance(window, tuple) and len(window) == 2 else (wind
 #   in the course folder:  git checkout end/s2-5
 #   then copy dashboard/app.py over yours, and commit it.
 # TODO(L1): call /metrics once per selected machine and concatenate
+frames = [pd.DataFrame(fetch("/metrics", machine=machine_id, freq=freq, **{"from": str(start), "to": str(end)})) for machine_id in chosen]
+kpis = pd.concat([f for f in frames if not f.empty], ignore_index=True)
 
 if kpis.empty:
     st.warning("No data in that window.")
