@@ -71,6 +71,7 @@ def test_availability_ignores_setup(sample_readings: pd.DataFrame) -> None:
     model, but not this one, and every downstream number moves with it.
     """
     # TODO(L2): write the assertion that proves this.
+    assert metrics.quality(sample_readings) == pytest.approx(0.6)
     raise AssertionError("not implemented")
 
 
@@ -81,6 +82,7 @@ def test_performance_uses_run_time_not_wall_clock(sample_readings: pd.DataFrame)
 
 def test_quality_counts_good_units(sample_readings: pd.DataFrame) -> None:
     # TODO(L2): write the assertion that proves this.
+    assert metrics.quality(sample_readings) == pytest.approx(0.3)
     raise AssertionError("not implemented")
 
 
@@ -96,6 +98,7 @@ def test_quality_on_empty_bucket(idle_readings: pd.DataFrame) -> None:
     infinity, so a single idle night shift poisoned the monthly OEE.
     """
     # TODO(L2): write the assertion that proves this.
+    assert metrics.quality(idle_readings) == pytest.approx(float("nan"))
     raise AssertionError("not implemented")
 
 
@@ -143,6 +146,10 @@ def test_quality_never_exceeds_one_on_clean_data(real_readings: pd.DataFrame) ->
     fed the metrics raw data.
     """
     # TODO(L2): write the assertion that proves this.
+    assert metrics.quality(real_readings) <= 1.0
+    assert metrics.quality(real_readings) >= 0.0
+    assert metrics.quality(real_readings) == pytest.approx(0.95)
+    assert metrics.performance(real_readings, ideal_cycle_time_s=4.0) == pytest.approx(0.75)
     raise AssertionError("not implemented")
 
 
