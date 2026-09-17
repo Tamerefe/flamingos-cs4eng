@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 from datetime import date, datetime, timezone
+from pathlib import Path
 
 import httpx
 import pandas as pd
@@ -129,74 +130,94 @@ def api_is_up() -> tuple[bool, str]:
 # --- charts ------------------------------------------------------------------
 
 
-def kpi_gauges(
+def kpi_pie(
     availability: float, performance: float, quality: float
 ) -> go.Figure:
-    """Three semi-circular Indicator gauges, one per OEE factor.
+    """Four individual donut pies: OEE, Availability, Performance, Quality.
 
-    Each gauge shows its own percentage so the supervisor reads three
-    independent numbers at a glance, not one aggregated slice.
+    Each donut shows the metric as a filled arc and the remainder as a dark
+    background arc, with the percentage annotated in the centre hole.
     """
     from plotly.subplots import make_subplots
 
-    factors = [
+    oee_val = (
+        availability * performance * quality
+        if not any(pd.isna(v) for v in (availability, performance, quality))
+        else float("nan")
+    )
+
+    metrics = [
+        ("OEE",          oee_val,      "#a78bfa"),          # purple
         ("Availability", availability, MACHINE_COLOUR["M-01"]),
         ("Performance",  performance,  MACHINE_COLOUR["M-02"]),
         ("Quality",      quality,      MACHINE_COLOUR["M-03"]),
     ]
 
+    # 1-row × 4-column grid — all donuts in a single horizontal strip
+    n_cols = 4
+    h_spacing = 0.04   # gap between donuts
     fig = make_subplots(
-        rows=1, cols=3,
-        specs=[[{"type": "indicator"}, {"type": "indicator"}, {"type": "indicator"}]],
-        column_widths=[1, 1, 1],
-        horizontal_spacing=0.02,
+        rows=1, cols=n_cols,
+        specs=[[{"type": "domain"}] * n_cols],
+        horizontal_spacing=h_spacing,
     )
-    for col_idx, (label, value, color) in enumerate(factors, 1):
-        pct = (value * 100) if not pd.isna(value) else 0.0
+
+    positions = [(1, c) for c in range(1, n_cols + 1)]
+    # Dynamically compute each column's centre x in paper space
+    col_w = (1.0 - (n_cols - 1) * h_spacing) / n_cols
+    centres = [
+        ((c - 1) * (col_w + h_spacing) + col_w / 2, 0.5)
+        for c in range(1, n_cols + 1)
+    ]
+
+    for (label, val, color), (row, col), (cx, cy) in zip(metrics, positions, centres):
+        pct = (val * 100) if not pd.isna(val) else 0.0
+        remainder = max(0.0, 100.0 - pct)
+        txt = "n/a" if pd.isna(val) else f"{val:.1%}"
+
         fig.add_trace(
-            go.Indicator(
-                mode="gauge+number",
-                value=pct,
-                title=dict(
-                    text=label,
-                    font=dict(color="#94a3b8", size=11,
-                              family='system-ui, -apple-system, "Segoe UI", sans-serif'),
+            go.Pie(
+                labels=[label, ""],
+                values=[pct, remainder],
+                hole=0.62,
+                marker=dict(
+                    colors=[color, CHART_GRID],
+                    line=dict(color="rgba(0,0,0,0)", width=0),
                 ),
-                number=dict(
-                    suffix="%",
-                    font=dict(color="#e2e8f0", size=18,
-                              family='system-ui, -apple-system, "Segoe UI", sans-serif'),
-                    valueformat=".1f",
-                ),
-                gauge=dict(
-                    axis=dict(
-                        range=[0, 100],
-                        tickwidth=1,
-                        tickcolor=CHART_AXIS,
-                        tickfont=dict(color="#64748b", size=8),
-                        nticks=5,
-                    ),
-                    bar=dict(color=color, thickness=0.65),
-                    bgcolor=CHART_GRID,
-                    borderwidth=0,
-                    steps=[dict(range=[0, 100], color=CHART_GRID)],
-                    threshold=dict(
-                        line=dict(color=STATUS_CRITICAL, width=2),
-                        thickness=0.8,
-                        value=85,
-                    ),
-                ),
+                textinfo="none",
+                hovertemplate=f"%{{label}}: %{{value:.1f}}%<extra></extra>",
+                showlegend=False,
+                opacity=0.92,
             ),
-            row=1, col=col_idx,
+            row=row, col=col,
         )
+
+        # Value — large, bold, centred in the hole
+        fig.add_annotation(
+            text=f"<b style='font-size:18px'>{txt}</b>"
+                 f"<br><span style='font-size:9px;color:#64748b'>{label}</span>",
+            x=cx, y=0.5,
+            xref="paper", yref="paper",
+            xanchor="center", yanchor="middle",
+            showarrow=False,
+            font=dict(size=18, color="#f1f5f9",
+                      family='system-ui, -apple-system, "Segoe UI", sans-serif'),
+            align="center",
+        )
+
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        height=200,
-        margin=dict(l=4, r=4, t=20, b=4),
+        height=220,
+        margin=dict(l=0, r=0, t=0, b=0),
+        showlegend=False,
         font=dict(family='system-ui, -apple-system, "Segoe UI", sans-serif', color="#94a3b8"),
     )
     return fig
+
+
+
+
 
 
 def oee_modern(kpis: pd.DataFrame, target: float = 0.85) -> go.Figure:
@@ -578,16 +599,7 @@ kpis_vis = kpis[kpis.machine_id.isin(_cur_vis)] if _cur_vis else kpis.head(0)
 c_left, c_output = st.columns([1, 1], gap="medium")
 
 with c_left:
-    # OEE headline number above the three factor gauges
-    oee_display = "n/a" if pd.isna(oee) else f"{oee:.1%}"
-    st.markdown(
-        f"<div style='text-align:center;padding:2px 0 0 0;height:48px'>"
-        f"<span style='font-size:12px;font-weight:600;color:#64748b;letter-spacing:0.05em;text-transform:uppercase'>OEE</span><br>"
-        f"<span style='font-size:30px;font-weight:700;color:#e2e8f0;line-height:1'>{oee_display}</span>"
-        f"<br><span style='font-size:10px;color:#64748b'>availability × performance × quality</span></div>",
-        unsafe_allow_html=True,
-    )
-    st.plotly_chart(kpi_gauges(availability, performance, quality), use_container_width=True)
+    st.plotly_chart(kpi_pie(availability, performance, quality), use_container_width=True)
 
 with c_output:
     if kpis_vis.empty:
@@ -637,19 +649,27 @@ with c_worst:
                 st.plotly_chart(worst_bucket_bar(row), use_container_width=True)
 
 
+if hasattr(st, "dialog"):
+    @st.dialog("Brainrot", width="large")
+    def video_popup_dialog(src):
+        st.video(src, loop=True, autoplay=True, muted=False)
+else:
+    def video_popup_dialog(src):
+        st.video(src, loop=True, autoplay=True, muted=False)
+
 # â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• 
 # ROW 3 â€” Secondary info, both collapsed by default (no vertical space cost)
 # â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• 
-c_data, c_anom = st.columns([1, 1], gap="small")
+c_info, c_video = st.columns([1, 1], gap="medium")
 
-with c_data:
+with c_info:
     with st.expander("All data + download", expanded=False):
         _display = (
             kpis
             .sort_values(["machine_id", "bucket_start"])
             .assign(
                 bucket_start=lambda df: df.bucket_start.dt.strftime("%d %b %H:%M"),
-                oee=lambda df: df.oee.map(lambda v: f"{v:.1%}" if pd.notna(v) else "â€”"),
+                oee=lambda df: df.oee.map(lambda v: f"{v:.1%}" if pd.notna(v) else "—"),
             )
         )
         st.dataframe(
@@ -678,10 +698,9 @@ with c_data:
             help="Downloads what is on screen: selected machines, period, bucket size.",
         )
 
-with c_anom:
     with st.expander("Anomaly log", expanded=False):
         st.caption(
-            f"Min severity: {min_severity:.2f}  Â·  "
+            f"Min severity: {min_severity:.2f}  ·  "
             "A flag is a request for human inspection, not a fault report."
         )
         episodes = pd.DataFrame(fetch("/anomalies", min_severity=min_severity))
@@ -706,6 +725,82 @@ with c_anom:
                     "duration_min": st.column_config.NumberColumn("duration", format="%d min"),
                 },
             )
+
+with c_video:
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stVideo"] {
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+        }
+        div[data-testid="stVideo"] video {
+            max-height: 220px;
+            width: 100%;
+            object-fit: contain;
+            background-color: #0b0f19;
+            border-radius: 8px;
+        }
+        div[data-testid="stDialog"] div[data-testid="stVideo"] video {
+            max-height: 75vh !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    dashboard_dir = Path(__file__).parent
+    default_video = dashboard_dir / "Minecraft Parkour Gameplay No Copyright.mp4"
+    if not default_video.exists():
+        mp4s = list(dashboard_dir.glob("*.mp4"))
+        if mp4s:
+            default_video = mp4s[0]
+
+    col_vtitle, col_vpop, col_vopt = st.columns([3, 1.2, 0.8], gap="small")
+    with col_vtitle:
+        st.markdown(
+            "<div style='padding-top:6px;font-size:13px;font-weight:600;color:#94a3b8'>"
+            "Brainrot <span style='font-size:10px;color:#22c55e;background:#14532d44;padding:2px 6px;border-radius:4px;margin-left:4px'>● LIVE</span>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+    with col_vopt:
+        with st.popover("⚙️", help="Video kaynağını değiştir / Change source"):
+            custom_file = st.file_uploader(
+                "Upload video",
+                type=["mp4", "webm", "mov", "avi", "mkv"],
+                key="video_uploader",
+            )
+            custom_url = st.text_input(
+                "Video URL / Path",
+                placeholder="https://... or path",
+                key="video_url_input",
+            )
+
+    video_to_play = None
+    if custom_file is not None:
+        video_to_play = custom_file
+    elif custom_url and custom_url.strip():
+        video_to_play = custom_url.strip()
+    elif default_video.exists():
+        video_to_play = str(default_video)
+
+    with col_vpop:
+        if st.button("⛶ Pop-up", key="btn_video_popup", help="Videoyu pop-up pencerede aç", use_container_width=True):
+            if video_to_play:
+                video_popup_dialog(video_to_play)
+
+    if video_to_play:
+        st.video(
+            video_to_play,
+            loop=True,
+            autoplay=True,
+            muted=True,
+        )
+    else:
+        st.warning("Video not found in dashboard directory.")
+
 
 # â•â• BONUS â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #

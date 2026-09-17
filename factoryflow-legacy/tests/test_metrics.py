@@ -97,9 +97,7 @@ def test_quality_on_empty_bucket(idle_readings: pd.DataFrame) -> None:
     count gives infinity in floating point, and infinity times anything is still
     infinity, so a single idle night shift poisoned the monthly OEE.
     """
-    # TODO(L2): write the assertion that proves this.
-    assert metrics.quality(idle_readings) == pytest.approx(float("nan"))
-    raise AssertionError("not implemented")
+    assert math.isnan(metrics.quality(idle_readings))
 
 
 def test_metrics_are_undefined_when_the_machine_never_ran(idle_readings: pd.DataFrame) -> None:
