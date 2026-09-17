@@ -99,8 +99,11 @@ def test_resample_preserves_total_units(real_readings: pd.DataFrame) -> None:
     'incomplete' last bucket, any closed/label mismatch shows up here as
     missing units.
     """
-    # TODO(L2): write the assertion that proves this.
-    raise AssertionError("not implemented")
+    expected = int(real_readings.units_produced.sum())
+    for freq in config.ALLOWED_FREQS:
+            table = pipeline.kpi_table(real_readings, freq=freq)
+            assert int(table.units_produced.sum()) == expected, f"units lost at freq={freq}"
+
 
 
 def test_resample_preserves_run_minutes(real_readings: pd.DataFrame) -> None:
