@@ -302,13 +302,6 @@ start, end = window if isinstance(window, tuple) and len(window) == 2 else (wind
 #   then copy dashboard/app.py over yours, and commit it.
 # TODO(L1): call /metrics once per selected machine and concatenate
 
-frames = [pd.DataFrame(fetch("/metrics", machine=machine_id,
-                                      freq=freq,
-                                      **{"from": str(start), "to": str(end)}))
-                   for machine_id in chosen]
-
-kpis = pd.concat([f for f in frames if not f.empty], ignore_index=True)
-
 if kpis.empty:
     st.warning("No data in that window.")
     st.stop()
